@@ -1,9 +1,26 @@
-.env
+# Python env / build
+.env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-prompt.md
-roadmap.md
+# IDE
+.vscode/
+.idea/
 
+# Raw grid model (CGMES export)
 Crete 2030/
-processed/
+
+# Raw measurement data (potentially sensitive)
 snapshots/
+
+# Processed data derived from CGMES + snapshots
+processed/
 crete2030_net.json
+
+# Misc cache / outputs
+*.log
+*.png
+*.pdf
