@@ -1,3 +1,4 @@
+#s2-inspect-net.py
 from pathlib import Path
 import pandapower as pp
 

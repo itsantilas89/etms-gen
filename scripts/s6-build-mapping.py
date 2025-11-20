@@ -1,3 +1,4 @@
+#s6-build-mapping.py
 from pathlib import Path
 import json
 import re
