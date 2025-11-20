@@ -1,0 +1,10 @@
+pandapower
+numba
+cimpy
+rdflib
+lxml
+pandapower[converter]
+igraph
+openpyxl
+pyarrow
+fastparquet
