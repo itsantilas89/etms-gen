@@ -45,7 +45,7 @@ pip install -r requirements.txt
   * First rows of `net.bus`, `net.line`, `net.load`.
 * Purpose: sanity-check CGMES import.
 
-### `s3-runopp.py` (or `s3-runpp.py` depending on filename)
+### `s3-runopp.py`
 
 * Input: `crete2030_net.json`.
 * Loads `net`, runs an AC power flow (`pp.runpp`) or OPF if configured.
@@ -158,7 +158,7 @@ pip install -r requirements.txt
   * CGMES XML files (grid topology and parameters).
   * Excel snapshots (minute-level P/Q).
   * All derived time-series and mapping artefacts.
-* **Commit** only:
+* **Commited** only:
 
   * Scripts (`scripts/*.py`).
   * `requirements.txt`, `README.md`, and non-sensitive documentation.
