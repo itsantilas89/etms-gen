@@ -24,6 +24,151 @@ pip install -r requirements.txt
 # pandapower[converter] numba cimpy rdflib lxml igraph pandas numpy scipy matplotlib
 ```
 
+## Scripts overview
+
+### `s1-import-cgmes.py`
+
+* Input: `Crete 2030/*.xml` (CGMES EQ, TP, DL, SSH, SV, GL).
+* Uses `pandapower.converter.cim.from_cim` to:
+
+  * Parse CGMES v2.4.15 model.
+  * Build a `pandapowerNet` with buses, lines, trafos, loads, gens, shunts, etc.
+* Output: `crete2030_net.json` in repo root (ignored by git).
+
+### `s2-inspect-net.py`
+
+* Input: `crete2030_net.json`.
+* Loads the net with `pp.from_json`.
+* Prints basic stats:
+
+  * Number of buses / lines / trafos / loads / gens / sgen / shunts.
+  * First rows of `net.bus`, `net.line`, `net.load`.
+* Purpose: sanity-check CGMES import.
+
+### `s3-runopp.py` (or `s3-runpp.py` depending on filename)
+
+* Input: `crete2030_net.json`.
+* Loads `net`, runs an AC power flow (`pp.runpp`) or OPF if configured.
+* Prints:
+
+  * Convergence flag.
+  * First few bus voltages (vm_pu, va_degree).
+  * First few line loadings.
+* Purpose: confirm that the imported network is electrically consistent.
+
+### `s4-plot-grid.py`
+
+* Input: `crete2030_net.json`.
+* Uses `pandapower.plotting.simple_plot` to generate a quick layout:
+
+  * If geodata available, uses it.
+  * Otherwise, creates generic coordinates (requires `python-igraph`).
+* Output: a plotted network (displayed via `matplotlib` window; optionally saved as PNG).
+* Purpose: quick visual sanity check of network topology.
+
+### `s5-read-snapshots.py`
+
+* Input: `snapshots/PowerProfilesData-Jan10.xlsx`, `snapshots/PowerProfilesData-Jun10.xlsx`.
+
+  * Each file has two sheets:
+
+    * `active power (MW)`
+    * `reactive power (MVAR)`
+  * Each sheet has 3 header rows, then 1440 rows (one per minute).
+* Logic:
+
+  * Reads both days’ P and Q sheets with 3 header rows (MultiIndex columns).
+  * Flattens headers to single-level column names:
+
+    * `TIMESTAMP`
+    * equipment IDs like `load_291231_1_MV`, `machine_291231_W3_MV`, `fixed shunt_291231_1_MV`, etc.
+  * Drops rows without TIMESTAMP.
+  * Concatenates the two days for P and Q separately.
+  * Removes `Unnamed:*` columns.
+  * Aligns P and Q on common timestamps.
+* Output:
+
+  * `processed/P_all.parquet` – aligned active power time series.
+  * `processed/Q_all.parquet` – aligned reactive power time series.
+* Purpose: turn messy Excel into clean, aligned P/Q time series.
+
+### `s6-build-mapping.py`
+
+* Input:
+
+  * `crete2030_net.json`
+  * `processed/P_all.parquet` / `processed/Q_all.parquet`
+* Logic:
+
+  * Builds a map from **Excel column name** → **(pandapower table, row index)**.
+  * Extracts a bus ID from column names, e.g.:
+
+    * `load_291231_1_MV` → bus id `291231`
+    * `machine_291231_W3_MV` → bus id `291231`
+    * `switched_shunt_61833_150kV` → bus id `61833`
+  * Maps bus id to `net.bus.index` based on bus name prefix.
+  * For each column:
+
+    * `load_...`    → match `net.load` with that `bus`.
+    * `machine_...` → prefer `net.sgen`, fallback to `net.gen`.
+    * `fixed shunt_...` / `switched_shunt_...` → `net.shunt`.
+* Output:
+
+  * `processed/mapping.json`:
+
+    * `"column_name": ["table", pp_index]`, e.g. `["load_291531_1_MV", ["load", 0]]`.
+* Purpose: link time series columns to concrete pandapower elements.
+
+### `s7-build-timeseries.py`
+
+* Input:
+
+  * `processed/P_all.parquet`
+  * `processed/Q_all.parquet`
+  * `processed/mapping.json`
+* Logic:
+
+  * Selects only the **mapped** columns (those with a valid pandapower element).
+  * Extracts:
+
+    * `t`: timestamps (`TIMESTAMP` column).
+    * `P`: matrix of active power, shape `(T, N_mapped)`.
+    * `Q`: matrix of reactive power, shape `(T, N_mapped)`.
+  * Builds a metadata table with:
+
+    * column name
+    * pandapower table (`load` / `sgen` / `gen` / `shunt`)
+    * pandapower element index.
+* Output:
+
+  * `processed/timeseries_mapped.npz` (compressed):
+
+    * `t`, `P`, `Q`, `columns`.
+  * `processed/timeseries_meta.csv`.
+* Purpose: final clean time-series representation ready for:
+
+  * model training,
+  * synthetic operating point generation,
+  * replay into `pandapower` for power-flow feasibility checks.
+
+## Data privacy / confidentiality
+
+* **Not** committed to the repo:
+
+  * CGMES XML files (grid topology and parameters).
+  * Excel snapshots (minute-level P/Q).
+  * All derived time-series and mapping artefacts.
+* **Commit** only:
+
+  * Scripts (`scripts/*.py`).
+  * `requirements.txt`, `README.md`, and non-sensitive documentation.
+
+
+
+
+
+---
+
 # Roadmap
 
 ## 1. Import the Crete CGMES network into Python
