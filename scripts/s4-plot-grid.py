@@ -1,4 +1,3 @@
-#s4-plot-grid.py
 from pathlib import Path
 
 import pandapower as pp
@@ -10,10 +9,16 @@ def main():
     base = Path(__file__).resolve().parent
     net_path = base / ".." / "crete2030_net.json"
 
-    # cast to str so pandapower treats it as filename, not JSON text
     net = pp.from_json(str(net_path))
 
-    simple_plot(net)
+    simple_plot(
+        net,
+        plot_loads=True,   # draw load symbols at the buses
+        plot_sgens=True,   # draw static generator symbols
+        load_size=1.5,
+        sgen_size=1.5,
+        bus_size=1.0,
+    )
     plt.show()
 
 
