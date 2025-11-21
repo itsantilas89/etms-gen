@@ -22,7 +22,6 @@ crete2030_net.json
 
 # Misc cache / outputs
 *.log
-*.png
 *.pdf
 
 
