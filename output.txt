@@ -1,0 +1,37 @@
+(.env) PS C:\Users\itsantilas\Documents\Coding\PythonProjects\etms-gen> python .\scripts\s10-check-feasibility.py 
+
+Feasible (converged) 
+time steps: 1440/1440 (100.0%) 
+Voltage min / max over converged steps: 0.8472006445104675 1.3110014061342818 
+Max line loading over converged steps: 246.05181262590398 
+Max trafo loading over converged steps: 149.32980347637098 
+
+
+
+(.env) PS C:\Users\itsantilas\Documents\Coding\PythonProjects\etms-gen> python .\scripts\s11-summrize_pf_results.py
+
+Total steps: 1440
+Converged only     : 1440/1440
+Voltage OK         : 0/1440
+Line loading OK    : 0/1440
+Trafo loading OK   : 0/1440
+All constraints OK : 0/1440
+
+
+
+(.env) PS C:\Users\itsantilas\Documents\Coding\PythonProjects\etms-gen> python .\scripts\s12-scale_correct_day.py
+
+Time steps with some feasible alpha: 0/1440
+Saved corrected synthetic day to: C:\Users\itsantilas\Documents\Coding\PythonProjects\etms-gen\processed\synthetic_day_001_corrected.npz
+
+
+
+
+Right now your pipeline is doing exactly what we asked it to do, and it’s basically saying:
+
+“All 1440 synthetic snapshots are numerically solvable, but none of them meet the very strict limits you set.”
+
+And then in step 12 it tried really hard to scale them into the “safe” box and concluded:
+
+“Even if I shrink them towards zero, I can’t get into that box under those rules.”
+
