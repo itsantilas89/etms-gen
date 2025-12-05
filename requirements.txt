@@ -10,3 +10,4 @@ pyarrow
 fastparquet
 scikit-learn
 matplotlib
+torch
