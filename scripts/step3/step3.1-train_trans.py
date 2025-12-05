@@ -2,10 +2,18 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+
+
+# paths
+ROOT = Path(__file__).resolve().parents[2]
+PROC_DIR = ROOT / "processed"
+MODELS_DIR = PROC_DIR / "models"
+TRANSFORMER_DIR = MODELS_DIR / "transformer"
+
+# -----------------------------------------------------------------------------
 
 
 class TimeSeriesDataset(Dataset):
@@ -13,7 +21,7 @@ class TimeSeriesDataset(Dataset):
         """
         X_norm: (T, D) normalized time series
         context_len: window length (L)
-        We build samples: seq[0:L] where the model learns to predict seq[1:L] from seq[0:L-1].
+        We build samples: seq[0:L] and learn to predict seq[1:L] from seq[0:L-1].
         """
         self.X = X_norm.astype(np.float32)
         self.L = context_len
@@ -26,8 +34,7 @@ class TimeSeriesDataset(Dataset):
         return self.n_samples
 
     def __getitem__(self, idx):
-        # seq shape: (L, D)
-        seq = self.X[idx:idx + self.L, :]
+        seq = self.X[idx:idx + self.L, :]  # (L, D)
         return seq
 
 
@@ -42,7 +49,7 @@ class PositionalEncoding(nn.Module):
         )
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)  # (1, max_len, d_model)
+        pe = pe.unsqueeze(0)
         self.register_buffer("pe", pe)
 
     def forward(self, x):
@@ -55,7 +62,8 @@ class PositionalEncoding(nn.Module):
 
 class TimeSeriesTransformer(nn.Module):
     def __init__(self, d_in: int, d_model: int = 128,
-                 nhead: int = 4, num_layers: int = 4, dim_feedforward: int = 256):
+                 nhead: int = 4, num_layers: int = 4,
+                 dim_feedforward: int = 256):
         super().__init__()
         self.d_in = d_in
         self.d_model = d_model
@@ -64,12 +72,12 @@ class TimeSeriesTransformer(nn.Module):
         self.pos_enc = PositionalEncoding(d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead,
+            d_model=d_model,
+            nhead=nhead,
             dim_feedforward=dim_feedforward,
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
         self.output_proj = nn.Linear(d_model, d_in)
 
     def forward(self, x):
@@ -77,20 +85,16 @@ class TimeSeriesTransformer(nn.Module):
         x: (B, L, D_in)
         returns: (B, L, D_in)
         """
-        h = self.input_proj(x)            # (B, L, d_model)
-        h = self.pos_enc(h)               # (B, L, d_model)
-        h = self.encoder(h)               # (B, L, d_model)
-        out = self.output_proj(h)         # (B, L, D_in)
+        h = self.input_proj(x)
+        h = self.pos_enc(h)
+        h = self.encoder(h)
+        out = self.output_proj(h)
         return out
 
 
 def main():
-    ROOT = Path(__file__).resolve().parents[2]
-    proc = ROOT / "processed"
-
-    # Load mapped time series
-    data = np.load(proc / "timeseries_mapped.npz", allow_pickle=True)
-    t = data["t"]              # (T,)
+    # load mapped time series
+    data = np.load(PROC_DIR / "timeseries_mapped.npz", allow_pickle=True)
     P = data["P"]              # (T, N)
     Q = data["Q"]              # (T, N)
     columns = data["columns"]  # (N,)
@@ -99,23 +103,22 @@ def main():
     assert Q.shape == (T, N)
     D = 2 * N
 
-    # Build full state X[t] = [P_t, Q_t]
+    # build full state X[t] = [P_t, Q_t]
     X = np.concatenate([P, Q], axis=1)  # (T, D)
 
-    # Normalize per dimension
+    # normalize per dimension
     x_mean = X.mean(axis=0)
     x_std = X.std(axis=0)
     x_std[x_std == 0.0] = 1.0
     X_norm = (X - x_mean) / x_std
 
-    # Dataset / loader
-    context_len = 60   # minutes of history
+    # dataset / loader
+    context_len = 60
     batch_size = 64
 
     ds = TimeSeriesDataset(X_norm, context_len=context_len)
     dl = DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
-    # Model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = TimeSeriesTransformer(d_in=D, d_model=128, nhead=4,
                                   num_layers=4, dim_feedforward=256)
@@ -125,20 +128,16 @@ def main():
     loss_fn = nn.MSELoss()
 
     n_epochs = 50
-
     model.train()
     for epoch in range(1, n_epochs + 1):
         total_loss = 0.0
         n_batches = 0
 
         for batch in dl:
-            # batch: (B, L, D)
-            batch = batch.to(device)  # float32
-            # Forward: predict next-step for each position
-            pred = model(batch)  # (B, L, D)
+            batch = batch.to(device)  # (B, L, D)
+            pred = model(batch)       # (B, L, D)
 
-            # We train next-step prediction within the window:
-            # use batch[:, :-1, :] to predict batch[:, 1:, :]
+            # next-step prediction within window
             pred_next = pred[:, :-1, :]
             target_next = batch[:, 1:, :]
 
@@ -155,14 +154,14 @@ def main():
         avg_loss = total_loss / max(1, n_batches)
         print(f"Epoch {epoch:3d} | train MSE: {avg_loss:.6f}")
 
-    # Save model + normalization
-    out_dir = proc / models / transformer
-    out_dir.mkdir(exist_ok=True)
+    # ensure dirs exist
+    TRANSFORMER_DIR.mkdir(parents=True, exist_ok=True)
 
-    model_path = out_dir / "ts_transformer.pt"
+    # save model + normalization
+    model_path = TRANSFORMER_DIR / "ts_transformer.pt"
     torch.save(model.state_dict(), model_path)
 
-    norm_path = out_dir / "ts_transformer_norm.npz"
+    norm_path = TRANSFORMER_DIR / "ts_transformer_norm.npz"
     np.savez(
         norm_path,
         x_mean=x_mean,

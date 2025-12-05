@@ -6,11 +6,17 @@ import pandas as pd
 import pandapower as pp
 
 
+ROOT = Path(__file__).resolve().parents[2]
+PROC_DIR = ROOT / "processed"
+SYN_DIR = PROC_DIR / "synthetic"
+PF_DIR = PROC_DIR / "pf"
+
+# choose which synthetic variant to evaluate: "pca" or "trans"
+DAY_ID = "day001"
+VARIANT = "trans"   # <- change to "pca" if needed
+
+
 def apply_snapshot_to_net(net, meta: pd.DataFrame, P_t: np.ndarray, Q_t: np.ndarray):
-    """
-    Write one time-step (P_t, Q_t) into the pandapower net according to meta.
-    P_t, Q_t are 1D arrays of length N (same column order as meta).
-    """
     for j, row in meta.iterrows():
         table = row["table"]
         idx = int(row["pp_index"])
@@ -18,35 +24,27 @@ def apply_snapshot_to_net(net, meta: pd.DataFrame, P_t: np.ndarray, Q_t: np.ndar
         q = float(Q_t[j])
 
         if table == "load":
-            net.load.at[idx, "p_mw"] = max(p, 0.0)  # load consumption >= 0
+            net.load.at[idx, "p_mw"] = max(p, 0.0)
             net.load.at[idx, "q_mvar"] = q
         elif table == "sgen":
-            # RES / static generators: positive P means generation
             net.sgen.at[idx, "p_mw"] = max(p, 0.0)
             net.sgen.at[idx, "q_mvar"] = q
         elif table == "gen":
-            # Conventional generators
             net.gen.at[idx, "p_mw"] = max(p, 0.0)
             net.gen.at[idx, "q_mvar"] = q
         elif table == "shunt":
-            # Shunts: only Q is relevant, set P to zero
             net.shunt.at[idx, "p_mw"] = 0.0
             net.shunt.at[idx, "q_mvar"] = q
-        else:
-            # Should not happen with current meta
-            continue
 
 
 def main():
-    ROOT = Path(__file__).resolve().parents[2]
-    proc = ROOT / "processed"
-
-    # Load network
+    # load network (CGMES-based)
     net = pp.from_json(str(ROOT / "crete2030_net_v2.json"))
 
-    # Load mapping meta and synthetic day
-    meta = pd.read_csv(proc / "timeseries_meta.csv")
-    syn = np.load(proc / synthetic / "day001_trans.npz", allow_pickle=True)
+    # load meta and synthetic day
+    meta = pd.read_csv(PROC_DIR / "timeseries_meta.csv")
+    syn_path = SYN_DIR / f"{DAY_ID}_{VARIANT}.npz"
+    syn = np.load(syn_path, allow_pickle=True)
 
     t_syn = syn["t"]          # (M,)
     P_syn = syn["P"]          # (M, N)
@@ -57,27 +55,21 @@ def main():
     assert Q_syn.shape == (M, N)
     assert len(meta) == N
 
-    # Basic sanity: column order in synthetic matches meta
     if not np.all(meta["column"].values == columns.astype(str)):
         print("WARNING: meta column order differs from synthetic columns")
 
-    # Arrays for results
     converged = np.zeros(M, dtype=bool)
-
     vmin = np.full(M, np.nan)
     vmax = np.full(M, np.nan)
     n_v_viol = np.zeros(M, dtype=int)
-
     line_max = np.full(M, np.nan)
     n_line_over = np.zeros(M, dtype=int)
-
     trafo_max = np.full(M, np.nan)
     n_trafo_over = np.zeros(M, dtype=int)
 
-    # Voltage and loading limits
     v_min_lim = 0.9
     v_max_lim = 1.1
-    loading_lim = 100.0  # percent
+    loading_lim = 100.0
 
     for k in range(M):
         P_t = P_syn[k, :]
@@ -86,14 +78,9 @@ def main():
         apply_snapshot_to_net(net, meta, P_t, Q_t)
 
         try:
-            # AC load flow, warm-start from previous results
-            pp.runpp(net,
-                    algorithm="nr",
-                    init="results",
-                    numba=False,
-                    run_control=True # true for v2 net
-            )
-        except Exception as e:
+            pp.runpp(net, algorithm="nr", init="results",
+                     numba=False, run_control=False)
+        except Exception:
             converged[k] = False
             continue
 
@@ -103,27 +90,24 @@ def main():
 
         converged[k] = True
 
-        # Voltages
         vm = net.res_bus.vm_pu.to_numpy()
-        vmin[k] = float(np.min(vm))
-        vmax[k] = float(np.max(vm))
+        vmin[k] = float(vm.min())
+        vmax[k] = float(vm.max())
         n_v_viol[k] = int(np.sum((vm < v_min_lim) | (vm > v_max_lim)))
 
-        # Lines
         if len(net.line) > 0 and "loading_percent" in net.res_line:
             lp = net.res_line.loading_percent.to_numpy()
-            line_max[k] = float(np.max(lp))
+            line_max[k] = float(lp.max())
             n_line_over[k] = int(np.sum(lp > loading_lim))
 
-        # Transformers
         if len(net.trafo) > 0 and "loading_percent" in net.res_trafo:
             tp = net.res_trafo.loading_percent.to_numpy()
-            trafo_max[k] = float(np.max(tp))
+            trafo_max[k] = float(tp.max())
             n_trafo_over[k] = int(np.sum(tp > loading_lim))
 
-    # Summary
     conv_rate = float(np.mean(converged))
-    print(f"Feasible (converged) time steps: {np.sum(converged)}/{M} ({conv_rate * 100:.1f}%)")
+    print(f"[{VARIANT}] Feasible (converged) time steps: "
+          f"{np.sum(converged)}/{M} ({conv_rate * 100:.1f}%)")
 
     if np.any(converged):
         print("Voltage min / max over converged steps:",
@@ -133,8 +117,8 @@ def main():
         print("Max trafo loading over converged steps:",
               np.nanmax(trafo_max[converged]) if np.any(~np.isnan(trafo_max[converged])) else "n/a")
 
-    # Save detailed results
-    out_path = proc / pf / "day001_trans_pf_results.npz"
+    PF_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = PF_DIR / f"{DAY_ID}_{VARIANT}_pf_results.npz"
     np.savez(
         out_path,
         t=t_syn,

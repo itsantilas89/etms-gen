@@ -6,11 +6,16 @@ import pandas as pd
 import pandapower as pp
 
 
+ROOT = Path(__file__).resolve().parents[2]
+PROC_DIR = ROOT / "processed"
+SYN_DIR = PROC_DIR / "synthetic"
+PF_DIR = PROC_DIR / "pf"
+
+DAY_ID = "day001"
+VARIANT = "trans"  # keep in sync with step4.1/4.2
+
+
 def apply_snapshot_to_net(net, meta: pd.DataFrame, P_t: np.ndarray, Q_t: np.ndarray):
-    """
-    Write one time-step (P_t, Q_t) into the pandapower net according to meta.
-    P_t, Q_t are 1D arrays of length N (same column order as meta).
-    """
     for j, row in meta.iterrows():
         table = row["table"]
         idx = int(row["pp_index"])
@@ -29,17 +34,12 @@ def apply_snapshot_to_net(net, meta: pd.DataFrame, P_t: np.ndarray, Q_t: np.ndar
         elif table == "shunt":
             net.shunt.at[idx, "p_mw"] = 0.0
             net.shunt.at[idx, "q_mvar"] = q
-        else:
-            continue
 
 
 def run_pf_and_check(net, v_min_lim, v_max_lim, loading_lim):
-    """
-    Run AC power flow and check voltage, line, trafo constraints.
-    Returns (ok, vmin, vmax, line_max, trafo_max).
-    """
     try:
-        pp.runpp(net, algorithm="nr", init="results", numba=False, run_control=True) # run_control=true for v2 net
+        pp.runpp(net, algorithm="nr", init="results",
+                 numba=False, run_control=False)
     except Exception:
         return False, np.nan, np.nan, np.nan, np.nan
 
@@ -71,43 +71,34 @@ def run_pf_and_check(net, v_min_lim, v_max_lim, loading_lim):
 
 
 def main():
-    ROOT = Path(__file__).resolve().parents[2]
-    proc = ROOT / "processed"
-
-    # Load network and meta
     net = pp.from_json(str(ROOT / "crete2030_net_v2.json"))
-    meta = pd.read_csv(proc / "timeseries_meta.csv")
+    meta = pd.read_csv(PROC_DIR / "timeseries_meta.csv")
 
-    # Load synthetic day and existing PF limits
-    syn = np.load(proc / synthetic / "day001_trans.npz", allow_pickle=True)
-    pf = np.load(proc / pf / "day001_trans_pf_results.npz", allow_pickle=True)
+    syn = np.load(SYN_DIR / f"{DAY_ID}_{VARIANT}.npz", allow_pickle=True)
+    pf = np.load(PF_DIR / f"{DAY_ID}_{VARIANT}_pf_results.npz", allow_pickle=True)
 
-    t_syn = syn["t"]          # (M,)
-    P_syn = syn["P"]          # (M, N)
-    Q_syn = syn["Q"]          # (M, N)
-    columns = syn["columns"]  # (N,)
+    t_syn = syn["t"]
+    P_syn = syn["P"]
+    Q_syn = syn["Q"]
+    columns = syn["columns"]
 
     M, N = P_syn.shape
     assert Q_syn.shape == (M, N)
     assert len(meta) == N
 
-    # Limits
     v_min_lim = float(pf["v_min_lim"])
     v_max_lim = float(pf["v_max_lim"])
     loading_lim = float(pf["loading_lim"])
 
-    # Arrays for corrected series and scales
     P_corr = np.zeros_like(P_syn)
     Q_corr = np.zeros_like(Q_syn)
     alpha = np.ones(M, dtype=float)
-
     ok_flags = np.zeros(M, dtype=bool)
 
     for k in range(M):
         P0 = P_syn[k, :].copy()
         Q0 = Q_syn[k, :].copy()
 
-        # First, test alpha = 1.0 (original)
         apply_snapshot_to_net(net, meta, P0, Q0)
         ok, _, _, _, _ = run_pf_and_check(net, v_min_lim, v_max_lim, loading_lim)
 
@@ -118,11 +109,10 @@ def main():
             ok_flags[k] = True
             continue
 
-        # If not ok, binary search in alpha ∈ (0, 1]
         lo, hi = 0.0, 1.0
         best_alpha = 0.0
 
-        for _ in range(12):  # ~1/2^12 resolution
+        for _ in range(12):
             mid = 0.5 * (lo + hi)
             if mid <= 0.0:
                 break
@@ -145,15 +135,14 @@ def main():
             Q_corr[k, :] = best_alpha * Q0
             ok_flags[k] = True
         else:
-            # Fall back to zero injections if nothing else works
             alpha[k] = 0.0
             P_corr[k, :] = 0.0
             Q_corr[k, :] = 0.0
             ok_flags[k] = False
 
-    print(f"Time steps with some feasible alpha: {ok_flags.sum()}/{M}")
+    print(f"[{VARIANT}] Time steps with some feasible alpha: {ok_flags.sum()}/{M}")
 
-    out_path = proc / pf / "day001_trans_pf_corrected.npz"
+    out_path = PF_DIR / f"{DAY_ID}_{VARIANT}_corrected.npz"
     np.savez(
         out_path,
         t=t_syn,
