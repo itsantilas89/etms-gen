@@ -11,19 +11,17 @@ __pycache__/
 .idea/
 
 # Raw grid model (CGMES export)
-Crete 2030/
+Crete_2030_xml_files/
 
 # Raw measurement data (potentially sensitive)
-snapshots/
+excel_snapshots/
 
 # Processed data derived from CGMES + snapshots
 processed/
 crete2030_net.json
+crete2030_net_v2.json
 
 # Misc cache / outputs
 *.log
 *.pdf
-
-
-roadmap.md
-prompt.md
+other/
