@@ -1,4 +1,4 @@
-#s10-check-feasibility.py
+# step4.1-check_feasibility.py
 from pathlib import Path
 
 import numpy as np
@@ -38,15 +38,15 @@ def apply_snapshot_to_net(net, meta: pd.DataFrame, P_t: np.ndarray, Q_t: np.ndar
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
-    proc = base / "processed"
+    ROOT = Path(__file__).resolve().parents[2]
+    proc = ROOT / "processed"
 
     # Load network
-    net = pp.from_json(str(base / "crete2030_net.json"))
+    net = pp.from_json(str(ROOT / "crete2030_net_v2.json"))
 
     # Load mapping meta and synthetic day
     meta = pd.read_csv(proc / "timeseries_meta.csv")
-    syn = np.load(proc / "synthetic_day_001.npz", allow_pickle=True)
+    syn = np.load(proc / synthetic / "day001_trans.npz", allow_pickle=True)
 
     t_syn = syn["t"]          # (M,)
     P_syn = syn["P"]          # (M, N)
@@ -87,7 +87,12 @@ def main():
 
         try:
             # AC load flow, warm-start from previous results
-            pp.runpp(net, algorithm="nr", init="results", numba=False)
+            pp.runpp(net,
+                    algorithm="nr",
+                    init="results",
+                    numba=False,
+                    run_control=True # true for v2 net
+            )
         except Exception as e:
             converged[k] = False
             continue
@@ -129,7 +134,7 @@ def main():
               np.nanmax(trafo_max[converged]) if np.any(~np.isnan(trafo_max[converged])) else "n/a")
 
     # Save detailed results
-    out_path = proc / "synthetic_day_001_pf_results.npz"
+    out_path = proc / pf / "day001_trans_pf_results.npz"
     np.savez(
         out_path,
         t=t_syn,

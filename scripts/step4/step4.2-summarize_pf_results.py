@@ -1,4 +1,4 @@
-#s11-summarize_pf_results.py
+# step4.2-summarize_pf_results.py
 from pathlib import Path
 import numpy as np
 
@@ -7,7 +7,7 @@ def main():
     base = Path(__file__).resolve().parents[1]
     proc = base / "processed"
 
-    pf = np.load(proc / "synthetic_day_001_pf_results.npz", allow_pickle=True)
+    pf = np.load(proc / pf / "day001_trans_pf_results.npz", allow_pickle=True)
 
     converged = pf["converged"]           # (M,)
     vmin = pf["vmin"]

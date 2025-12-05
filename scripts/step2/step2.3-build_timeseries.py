@@ -1,4 +1,4 @@
-#s7-build-timeseries.py
+# step2.3-build_timeseries.py
 from pathlib import Path
 import json
 
@@ -7,8 +7,8 @@ import pandas as pd
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
-    proc = base / "processed"
+    ROOT = Path(__file__).resolve().parents[2]
+    proc = ROOT / "processed"
 
     # Load aligned P, Q and mapping
     p_all = pd.read_parquet(proc / "P_all.parquet")

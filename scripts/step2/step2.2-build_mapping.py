@@ -1,4 +1,4 @@
-#s6-build-mapping.py
+# step2.2-build_mapping.py
 from pathlib import Path
 import json
 import re
@@ -39,12 +39,12 @@ def extract_bus_id(col: str):
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
+    ROOT = Path(__file__).resolve().parents[2]
 
     # Load network and time series
-    net = pp.from_json(str(base / "crete2030_net.json"))
-    p_all = pd.read_parquet(base / "processed" / "P_all.parquet")
-    q_all = pd.read_parquet(base / "processed" / "Q_all.parquet")
+    net = pp.from_json(str(ROOT / "crete2030_net.json"))
+    p_all = pd.read_parquet(ROOT / "processed" / "P_all.parquet")
+    q_all = pd.read_parquet(ROOT / "processed" / "Q_all.parquet")
 
     # Columns to map: ignore TIMESTAMP and Unnamed
     cols = [
@@ -111,7 +111,7 @@ def main():
         print("First 20 unmatched:", unmatched[:20])
 
     # Save mapping for later use
-    out_path = base / "processed" / "mapping.json"
+    out_path = ROOT / "processed" / "mapping.json"
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(mapping, f, indent=2)
 

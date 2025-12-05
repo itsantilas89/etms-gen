@@ -1,4 +1,4 @@
-#s12-scale_correct_day.py
+# step4.3-scale_correct_day.py
 from pathlib import Path
 
 import numpy as np
@@ -39,7 +39,7 @@ def run_pf_and_check(net, v_min_lim, v_max_lim, loading_lim):
     Returns (ok, vmin, vmax, line_max, trafo_max).
     """
     try:
-        pp.runpp(net, algorithm="nr", init="results", numba=False)
+        pp.runpp(net, algorithm="nr", init="results", numba=False, run_control=True) # run_control=true for v2 net
     except Exception:
         return False, np.nan, np.nan, np.nan, np.nan
 
@@ -71,16 +71,16 @@ def run_pf_and_check(net, v_min_lim, v_max_lim, loading_lim):
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
-    proc = base / "processed"
+    ROOT = Path(__file__).resolve().parents[2]
+    proc = ROOT / "processed"
 
     # Load network and meta
-    net = pp.from_json(str(base / "crete2030_net.json"))
+    net = pp.from_json(str(ROOT / "crete2030_net_v2.json"))
     meta = pd.read_csv(proc / "timeseries_meta.csv")
 
     # Load synthetic day and existing PF limits
-    syn = np.load(proc / "synthetic_day_001.npz", allow_pickle=True)
-    pf = np.load(proc / "synthetic_day_001_pf_results.npz", allow_pickle=True)
+    syn = np.load(proc / synthetic / "day001_trans.npz", allow_pickle=True)
+    pf = np.load(proc / pf / "day001_trans_pf_results.npz", allow_pickle=True)
 
     t_syn = syn["t"]          # (M,)
     P_syn = syn["P"]          # (M, N)
@@ -153,7 +153,7 @@ def main():
 
     print(f"Time steps with some feasible alpha: {ok_flags.sum()}/{M}")
 
-    out_path = proc / "synthetic_day_001_corrected.npz"
+    out_path = proc / pf / "day001_trans_pf_corrected.npz"
     np.savez(
         out_path,
         t=t_syn,

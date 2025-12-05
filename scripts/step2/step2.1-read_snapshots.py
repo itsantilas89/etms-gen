@@ -1,4 +1,4 @@
-#s5-read-snapshots.py
+# step2.1-read_snapshots.py
 from pathlib import Path
 
 import pandas as pd
@@ -70,11 +70,12 @@ def load_snapshot_excel(path: Path, p_sheet: str, q_sheet: str):
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
-    snap_dir = base / "snapshots"
+    ROOT = Path(__file__).resolve().parents[2]
 
-    day1_file = snap_dir / "PowerProfilesData-Jan10.xlsx"
-    day2_file = snap_dir / "PowerProfilesData-Jun10.xlsx"
+    EXCEL_SNAPSHOT_DIR = ROOT / "excel_snapshots"
+
+    day1_file = EXCEL_SNAPSHOT_DIR / "PowerProfilesData-Jan10.xlsx"
+    day2_file = EXCEL_SNAPSHOT_DIR / "PowerProfilesData-Jun10.xlsx"
 
     p_sheet_name = "active power (MW)"
     q_sheet_name = "reactive power (MVAR)"
@@ -113,7 +114,7 @@ def main():
     print("P_all shape:", p_all.shape)
     print("Q_all shape:", q_all.shape)
 
-    out_dir = base / "processed"
+    out_dir = ROOT / "processed"
     out_dir.mkdir(exist_ok=True)
 
     p_all.to_parquet(out_dir / "P_all.parquet")

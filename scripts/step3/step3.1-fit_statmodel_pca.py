@@ -1,4 +1,4 @@
-#s8-fit-statmodel.py
+# step3.1-fit_statmodel_pca.py
 from pathlib import Path
 
 import numpy as np
@@ -7,8 +7,8 @@ from sklearn.decomposition import PCA
 
 
 def main():
-    base = Path(__file__).resolve().parents[1]
-    proc = base / "processed"
+    ROOT = Path(__file__).resolve().parents[2]
+    proc = ROOT / "processed"
 
     data = np.load(proc / "timeseries_mapped.npz", allow_pickle=True)
     t = data["t"]              # datetime64[ns], shape (T,)
@@ -70,7 +70,7 @@ def main():
     cov_eps = np.cov(eps, rowvar=False)  # shape (K, K)
 
     # 8) Save everything
-    out = proc / "stat_model.npz"
+    out = proc / models / statmodel / "stat_model.npz"
     np.savez(
         out,
         columns=columns,

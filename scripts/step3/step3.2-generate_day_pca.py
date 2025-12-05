@@ -1,4 +1,4 @@
-#s9-generate-synthetic_day.py
+# step3.2-generate_day_pca.py
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +21,7 @@ def main():
     D = 2 * N
 
     # Load statistical model
-    model = np.load(proc / "stat_model.npz", allow_pickle=True)
+    model = np.load(proc / models / statmodel / "stat_model.npz", allow_pickle=True)
     mu = model["mu"]               # (1440, D)
     r_mean = model["r_mean"]       # (D,)
     r_std = model["r_std"]         # (D,)
@@ -83,7 +83,7 @@ def main():
     t_syn = pd.date_range(start=start_time, periods=M, freq="1min")
 
     # Save
-    out_path = proc / "synthetic_day_001.npz"
+    out_path = proc / synthetic / "day001_pca.npz"
     np.savez(
         out_path,
         t=t_syn.to_numpy("datetime64[ns]"),
